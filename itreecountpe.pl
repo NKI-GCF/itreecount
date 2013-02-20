@@ -32,6 +32,12 @@ my $chr;
 GetOptions("gtf:s"=>\$gtffile, "chr:s"=>\$chr) or die "Usage";
 my $bamfile = shift;
 
+
+#name the constants
+my $AMBIGUOUS = "ambiguous_$chr";
+my $ALIGNMENT_NOT_UNIQUE = "alignment_not_unique_$chr";
+my $NO_FEATURE = "no_feature_$chr";
+
 (my $chrtree, my $genelist) = read_gtf($gtffile, $chr);
 #prepare the count structure
 my %counts = map {$_ => 0} keys $genelist;
@@ -68,7 +74,7 @@ my $callback = sub {
 
 		} else { #mate is mapped
 			#is the mate on the same chromosome? if not than this read is ambiguous
-			++$counts{ambiguous} && return if $alignment->mtid != $alignment->tid;
+			++$counts{$AMBIGUOUS} && return if $alignment->mtid != $alignment->tid;
 			
 			#do we already have the mate info?
 			my $mateid = join(":", $alignment->qname, $alignment->mate_start);
@@ -92,7 +98,7 @@ my $callback = sub {
 	my %genes;
 	foreach my $a (@countthis) {
 		#multimapper (one or both...don't really care
-		++$counts{alignment_not_unique} && return if $a->aux_get("NH") > 1;
+		++$counts{$ALIGNMENT_NOT_UNIQUE} && return if $a->aux_get("NH") > 1;
 
 		#get the cigar string
 		my $cigarray = $a->cigar_array;
@@ -115,17 +121,16 @@ my $callback = sub {
 	}
 
 	my @ugenes = keys %genes;
-	++$counts{no_feature} && return if $#ugenes == -1;
-	++$counts{ambiguous} && return if $#ugenes > 0;
+	++$counts{$NO_FEATURE} && return if $#ugenes == -1;
+	++$counts{$AMBIGUOUS} && return if $#ugenes > 0;
 	$counts{$ugenes[0]}++;
 	return;
 };
 
+#load the requested chromsome from the bam file and call the callback for every read
 $index->fetch($bam,$header->parse_region($chr),$callback);
 
 print STDERR scalar(keys(%delayed)), " mates never matched\n";
-$counts{alignment_not_unique} += scalar(keys(%delayed));
-
 print join("\t", $_, $counts{$_}),"\n" foreach sort keys %counts;
 exit;
 

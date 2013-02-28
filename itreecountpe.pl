@@ -1,169 +1,86 @@
-#!/usr/bin/perl 
-#===============================================================================
-#
-#         FILE: itreecount.pl
-#
-#        USAGE: ./itreecount.pl  
-#
-#  DESCRIPTION: 
-#
-#      OPTIONS: ---
-# REQUIREMENTS: ---
-#         BUGS: ---
-#        NOTES: ---
-#       AUTHOR: Arno Velds (), a.velds@nki.nl
-#      COMPANY: NKI
-#      VERSION: 1.0
-#      CREATED: 02/15/2013 10:26:14 AM
-#     REVISION: ---
-#===============================================================================
+#!/usr/bin/env perl 
 
 use strict;
 use warnings;
 
-use Bio::DB::Sam;
-use Set::IntervalTree;
+use Parallel::ForkManager;
 use Getopt::Long;
 use Data::Dumper;
+use TreeCount;
+use File::Temp qw/ tempfile tempdir /;
 
 my $gtffile;
-my $chr;
+my $ncpu = 10;
+my $verbose;
+my $output;
 
-GetOptions("gtf:s"=>\$gtffile, "chr:s"=>\$chr) or die "Usage";
+GetOptions("gtf:s"=>\$gtffile, "ncpu|t:i"=>\$ncpu, "verbose|v"=>\$verbose, "output|o:s"=>\$output) or die "Usage";
 my $bamfile = shift;
 
+(my $iforest, my $genelist) = read_gtf_as_intervalforest($gtffile);
 
-#name the constants
-my $AMBIGUOUS = "ambiguous_$chr";
-my $ALIGNMENT_NOT_UNIQUE = "alignment_not_unique_$chr";
-my $NO_FEATURE = "no_feature_$chr";
-
-(my $chrtree, my $genelist) = read_gtf($gtffile, $chr);
-#prepare the count structure
-my %counts = map {$_ => 0} keys $genelist;
-#the wait structure
-my %delayed = ();
-
-print STDERR scalar(keys(%$genelist)), " genes found\n";
-
-my $bam          = Bio::DB::Bam->open($bamfile);
-my $header       = $bam->header;
+my ($bam, $header) =  open_bam($bamfile);
 my $target_count = $header->n_targets;
 my $target_names = $header->target_name;
+my $chrlengths = $header->target_len;
 
-my $index = Bio::DB::Bam->index_open_in_safewd($bamfile) or die "Indexed bams only\n";
+#prepare the fork manager
+my $pm = Parallel::ForkManager->new($ncpu);
 
-my $callback = sub {
-	my $alignment = shift;
-	my $start       = $alignment->start;
-	my $end         = $alignment->end;
-	my $seqid       = $target_names->[$alignment->tid];
-	#check for pairs?
-	
-	my $flag = $alignment->flag;
-	#we don't get unmapped reads in tophat output, but skip em anyway
-	next if $flag & 4;
+#the location for the temp files
+my $tmpdir = tempdir( CLEANUP => 1 );
+my %tmpfiles;
 
-	my @countthis;
+#process the chromosomes in large to small order should give best runtime
+my @o = sort { $chrlengths->[$b] <=> $chrlengths->[$a] } 0 .. ($target_count - 1);
+foreach my $tid (@o) {
+	my $chr =  $target_names->[$tid];
+	print STDERR "Forking child for chromosome $chr\n";
 
-	if ($flag & 1) {
-		#paired end
-		if ($flag & 8) {
-			#mate is unmapped treat this read as single end
-			push @countthis, $alignment;
+	#open the temp file for this chromosome
+	my ($fh, $filename) = tempfile( UNLINK => 0, DIR => $tmpdir );
 
-		} else { #mate is mapped
-			#is the mate on the same chromosome? if not than this read is ambiguous
-			++$counts{$AMBIGUOUS} && return if $alignment->mtid != $alignment->tid;
-			
-			#do we already have the mate info?
-			my $mateid = join(":", $alignment->qname, $alignment->mate_start);
-			#print STDERR "$mateid\n";
-			if (exists $delayed{$mateid}) {
-				my $a2 = shift(@{$delayed{$mateid}});
-				push @countthis, ($alignment, $a2);
-				delete $delayed{$mateid} if $#{$delayed{$mateid}} == -1;
-			} else {
-				#delay this read until we see the mate
-				push @{$delayed{join(":", $alignment->qname, $start)}}, $alignment;
-				return;
-			}
-		}
-	} else {
-		#unpaired read. Just count it normally
-		push @countthis, $alignment;
+	if($verbose) {
+		print STDERR "Child $$ writing temporary data to $filename\n";
 	}
 
+	$tmpfiles{$target_names->[$tid]} = $filename;
 
-	my %genes;
-	foreach my $a (@countthis) {
-		#multimapper (one or both...don't really care
-		++$counts{$ALIGNMENT_NOT_UNIQUE} && return if $a->aux_get("NH") > 1;
+	$pm->start and next; # do the fork
 
-		#get the cigar string
-		my $cigarray = $a->cigar_array;
-		my $pos = $a->start;
-		foreach my $e (@$cigarray) {
-			if ($e->[0] =~ "^M") {
-				$genes{$_}++ foreach (@{$chrtree->fetch($pos, $pos + $e->[1]);});
-				$pos += $e->[1];
-			} elsif ($e->[0] =~ "^N") {
-				$pos += $e->[1];
-			} elsif ($e->[0] =~ "^I") {
-				#insertion in reference (don't count)
-			} elsif ($e->[0] =~ "^D") {
-				#deletion in reference (count)
-				$pos += $e->[1];
-			} else {
-				warn "Cigar operation $e->[0] not supported", join("", map {$_->[0] . $_->[1]} @$cigarray), "\n";
-			}
-		}
-	}
+	#we must reopen the bam in the forked child
+	my ($fbam, $fheader, $findex) = open_bam($bamfile);
 
-	my @ugenes = keys %genes;
-	++$counts{$NO_FEATURE} && return if $#ugenes == -1;
-	++$counts{$AMBIGUOUS} && return if $#ugenes > 0;
-	$counts{$ugenes[0]}++;
-	return;
-};
+	#initialize all counts at zero
+	my $count = { map {$_ => 0} keys %{$genelist->{$chr}} };
+	my $delayed = {};
 
-#load the requested chromsome from the bam file and call the callback for every read
-$index->fetch($bam,$header->parse_region($chr),$callback);
+	#load the requested chromsome from the bam file and call the callback for every read
+	$findex->fetch($fbam,$fheader->parse_region($chr), \&TreeCount::count_read_callback, [$iforest, $count, $delayed, $target_names]);
 
-print STDERR scalar(keys(%delayed)), " mates never matched\n";
-print join("\t", $_, $counts{$_}),"\n" foreach sort keys %counts;
-exit;
+	print STDERR "Chromosome $chr done. ", scalar(keys(%$delayed)), " mates never matched\n" if $verbose;
+	print $fh join("\t", $_, $count->{$_}),"\n" foreach sort keys %$count;
+	close($fh);
 
+	$pm->finish; # do the exit in the child process
+}
+$pm->wait_all_children;
 
-sub read_gtf {
-	my $file = shift;
-	my $chr = "" . shift;
-
-	open(IN,"<", $file) or die "$!\n";
-
-	my $tree = Set::IntervalTree->new;
-	my $haveread = 0;
-	my %genes;
-	my $nread = 0;
-	while(my $line = <IN>) {
-		my @e = split /\t/, $line;
-		if ($e[0] ne $chr) {
-			last if($haveread);
-			next;
-		}
-		next unless $e[2] eq "exon";
-		next unless $e[8] =~ m/gene_id\s\"(\w+)\"/;
-		my $geneid = $1;
-		$genes{$geneid} = 0;
-		$tree->insert($geneid, $e[3], $e[4]+1);
-		
-		$haveread = 1;
-		$nread++;
-	}
-	print STDERR "Read $nread lines from GTF\n";
-	return ($tree, \%genes);
+#write report
+print STDERR "Collection data parts\n";
+if(defined $output) {
+	open(OUT,">", $output) or die "$!\n";
+	select OUT;
 }
 
+#collect all data
+for my $ch (@$target_names) {
+	#get the formatted path
+	open(I,"<", $tmpfiles{$ch}) or warn "Temp file $tmpfiles{$ch} for chromosome $ch not found?\n";
+	print while <I>;
+	close(I);
+}
 
+exit;
 
 

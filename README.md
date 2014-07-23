@@ -12,7 +12,7 @@ Getopt::Long           (core)
 File::Temp             (core)
 
 Usage
-itreecount.pl --gtf <gtffile> --ncpu 10 --output counts.txt <bamfile.bam>
+itreecountpe.pl --gtf <gtffile> --ncpu 10 --output counts.txt <bamfile.bam>
 
 The bam file can be single or paired-end, needs to be indexed (and not namesorted).
 

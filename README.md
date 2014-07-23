@@ -3,7 +3,7 @@ file. The processing is parallelized over chromosomes in the bam file only. Coun
 is done identical to the union method of the popular (but slow) htseq-count python package.
 
 Dependencies
-Parreadcount depends on the following perl packages:
+itreecount depends on the following perl packages:
 
 Parallel::ForkManager  (CPAN)
 Bio::DB::Sam           (CPAN)

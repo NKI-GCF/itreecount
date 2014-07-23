@@ -86,19 +86,18 @@ sub count_read_callback {
 		#other aligners are used.
 		my $pos = $a->start;
 		foreach my $e (@$cigarray) {
-			if ($e->[0] =~ "^M") {
+			if ($e->[0] =~ /^M/) {
 				$genes{$_}++ foreach (@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);});
 				$pos += $e->[1];
-			} elsif ($e->[0] =~ "^N") {
+			} elsif ($e->[0] =~ /^N/) {
 				$pos += $e->[1];
-			} elsif ($e->[0] =~ "^I") {
+			} elsif ($e->[0] =~ /^I/) {
 				#insertion in reference (don't count)
-			} elsif ($e->[0] =~ "^D") {
+			} elsif ($e->[0] =~ /^D/) {
 				#deletion in reference (count)
 				$pos += $e->[1];
-			} elsif ($e->[0] =~ "^S") {
+			} elsif ($e->[0] =~ /^S/) {
 				#soft clipped based we ignore
-				$pos += $e->[1];
 			} else {
 				warn "Cigar operation $e->[0] not supported", join("", map {$_->[0] . $_->[1]} @$cigarray), "\n";
 			}

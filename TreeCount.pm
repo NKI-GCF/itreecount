@@ -3,7 +3,6 @@ package TreeCount;
 use strict;
 use warnings;
 
-use Data::Dumper;
 use Bio::DB::Sam;
 use Set::IntervalTree;
 
@@ -27,7 +26,7 @@ sub open_bam  {
 	my $target_count = $header->n_targets;
 	my $target_names = $header->target_name;
 	
-	my $index = Bio::DB::Bam->index_open_in_safewd($file) or die "Indexed bams only\n";
+	my $index = Bio::DB::Bam->index_open_in_safewd($file) or die "Indexed bams only, failed on $file\n";
 
 	return ($bam, $header, $index);
 }
@@ -82,6 +81,9 @@ sub count_read_callback {
 
 		#get the cigar string
 		my $cigarray = $a->cigar_array;
+		#the cigar parser parses only a subset of the possible elements. This
+		#should be enough to process TopHat data, but might need enhancements when
+		#other aligners are used.
 		my $pos = $a->start;
 		foreach my $e (@$cigarray) {
 			if ($e->[0] =~ "^M") {
@@ -93,6 +95,9 @@ sub count_read_callback {
 				#insertion in reference (don't count)
 			} elsif ($e->[0] =~ "^D") {
 				#deletion in reference (count)
+				$pos += $e->[1];
+			} elsif ($e->[0] =~ "^S") {
+				#soft clipped based we ignore
 				$pos += $e->[1];
 			} else {
 				warn "Cigar operation $e->[0] not supported", join("", map {$_->[0] . $_->[1]} @$cigarray), "\n";

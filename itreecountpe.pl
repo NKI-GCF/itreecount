@@ -5,9 +5,12 @@ use warnings;
 
 use Parallel::ForkManager;
 use Getopt::Long;
-use Data::Dumper;
-use TreeCount;
 use File::Temp qw/ tempfile tempdir /;
+use Cwd 'abs_path';
+
+use FindBin;
+use lib "$FindBin::Bin";
+use TreeCount;
 
 my $gtffile;
 my $ncpu = 10;
@@ -15,7 +18,7 @@ my $verbose;
 my $output;
 
 GetOptions("gtf:s"=>\$gtffile, "ncpu|t:i"=>\$ncpu, "verbose|v"=>\$verbose, "output|o:s"=>\$output) or die "Usage";
-my $bamfile = shift;
+my $bamfile = abs_path(shift);
 
 (my $iforest, my $genelist) = read_gtf_as_intervalforest($gtffile);
 
@@ -67,7 +70,7 @@ foreach my $tid (@o) {
 $pm->wait_all_children;
 
 #write report
-print STDERR "Collection data parts\n";
+print STDERR "Collecting data parts\n";
 if(defined $output) {
 	open(OUT,">", $output) or die "$!\n";
 	select OUT;

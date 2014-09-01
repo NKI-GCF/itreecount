@@ -13,11 +13,12 @@ use lib "$FindBin::Bin";
 use TreeCount;
 
 my $gtffile;
+my $stranded = 0;
 my $ncpu = 10;
 my $verbose;
 my $output;
 
-GetOptions("gtf:s"=>\$gtffile, "ncpu|t:i"=>\$ncpu, "verbose|v"=>\$verbose, "output|o:s"=>\$output) or die "Usage";
+GetOptions("gtf:s"=>\$gtffile, "stranded"=>\$stranded, "ncpu|t:i"=>\$ncpu, "verbose|v"=>\$verbose, "output|o:s"=>\$output) or die "Usage";
 my $bamfile = abs_path(shift);
 
 (my $iforest, my $genelist) = read_gtf_as_intervalforest($gtffile);
@@ -59,7 +60,7 @@ foreach my $tid (@o) {
 	my $delayed = {};
 
 	#load the requested chromsome from the bam file and call the callback for every read
-	$findex->fetch($fbam,$fheader->parse_region($chr), \&TreeCount::count_read_callback, [$iforest, $count, $delayed, $target_names]);
+	$findex->fetch($fbam,$fheader->parse_region($chr), \&TreeCount::count_read_callback, [$iforest, $count, $delayed, $target_names, $stranded]);
 
 	print STDERR "Chromosome $chr done. ", scalar(keys(%$delayed)), " mates never matched\n" if $verbose;
 	print $fh join("\t", $_, $count->{$_}),"\n" foreach sort keys %$count;

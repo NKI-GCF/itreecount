@@ -5,6 +5,7 @@ use warnings;
 
 use Bio::DB::Sam;
 use Set::IntervalTree;
+use Data::Dumper;
 
 our (@ISA, @EXPORT);
 BEGIN {
@@ -35,7 +36,7 @@ sub count_read_callback {
 	my $alignment = shift;
 
 	my $data = shift;
-	my ($iforest, $counts, $delayed, $chr_names) = @$data;
+	my ($iforest, $counts, $delayed, $chr_names, $stranded) = @$data;
 
 	my $start = $alignment->start;
 	my $end = $alignment->end;
@@ -79,8 +80,12 @@ sub count_read_callback {
 
 	my %genes;
 	foreach my $a (@countthis) {
-		#multimapper (one or both...don't really care
-		++$counts->{"$ALIGNMENT_NOT_UNIQUE-$chr"} && return if $a->aux_get("NH") > 1;
+		#multimapper (one or both...don't really care)  (for non tophat results cut on mapq)
+		if (defined $a->aux_get("NH") ) {
+			++$counts->{"$ALIGNMENT_NOT_UNIQUE-$chr"} && return if $a->aux_get("NH") > 1
+		} else {
+			++$counts->{"$ALIGNMENT_NOT_UNIQUE-$chr"} && return if $a->qual < 10
+		}
 
 		#get the cigar string
 		my $cigarray = $a->cigar_array;
@@ -90,7 +95,11 @@ sub count_read_callback {
 		my $pos = $a->start;
 		foreach my $e (@$cigarray) {
 			if ($e->[0] =~ /^M/) {
-				$genes{$_}++ foreach (@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);});
+				#store gene name if segment overlaps a gene (optionally stranded)
+				foreach ((@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);})) {
+					if($_->[0] eq "ENSG00000008735") {
+					$genes{$_->[0]}++ if !$stranded || ( (($flag & 16) != 0 ) == $_->[1]);
+				}
 				$pos += $e->[1];
 			} elsif ($e->[0] =~ /^N/) {
 				$pos += $e->[1];
@@ -99,8 +108,8 @@ sub count_read_callback {
 			} elsif ($e->[0] =~ /^D/) {
 				#deletion in reference (count)
 				$pos += $e->[1];
-			} elsif ($e->[0] =~ /^S/) {
-				#soft clipped based we ignore
+			} elsif ($e->[0] =~ /^S/ || $e->[0] =~ /^H/) {
+				#hard/soft clipped based we ignore
 			} else {
 				warn "Cigar operation $e->[0] not supported", join("", map {$_->[0] . $_->[1]} @$cigarray), "\n";
 			}
@@ -137,7 +146,7 @@ sub read_gtf_as_intervalforest {
 		my $geneid = $1;
 		$genes{$chr}->{$geneid} = 0;
 		$genecount{$geneid} = 0;
-		$forest{$chr}->insert($geneid, $e[3], $e[4]+1);
+		$forest{$chr}->insert([$geneid, $e[6] eq "+"], $e[3], $e[4]+1);
 		
 		$nread++;
 	}

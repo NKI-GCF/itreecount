@@ -97,9 +97,7 @@ sub count_read_callback {
 			if ($e->[0] =~ /^M/) {
 				#store gene name if segment overlaps a gene (optionally stranded)
 				foreach ((@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);})) {
-					if($_->[0] eq "ENSG00000008735") {
 					$genes{$_->[0]}++ if !$stranded || ( (($flag & 16) != 0 ) == $_->[1]);
-				}
 				$pos += $e->[1];
 			} elsif ($e->[0] =~ /^N/) {
 				$pos += $e->[1];

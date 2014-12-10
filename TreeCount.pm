@@ -97,7 +97,11 @@ sub count_read_callback {
 			if ($e->[0] =~ /^M/) {
 				#store gene name if segment overlaps a gene (optionally stranded)
 				foreach ((@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);})) {
-					$genes{$_->[0]}++ if !$stranded || ( (($flag & 16) != 0 ) == $_->[1]);
+					$genes{$_->[0]}++ if !$stranded || 
+						( 
+							( ($flag & 64) && ( (($flag & 16) != 0 ) == $_->[1]) ) || # first read in pair strand equals reverse gene strand
+							( ($flag & 128) && ( (($flag & 16) != 0 ) != $_->[1]) )   # second read in pair strand equals gene strand
+						);
 				}
 				$pos += $e->[1];
 			} elsif ($e->[0] =~ /^N/) {

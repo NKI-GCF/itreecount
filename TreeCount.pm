@@ -87,6 +87,9 @@ sub count_read_callback {
 			++$counts->{"$ALIGNMENT_NOT_UNIQUE-$chr"} && return if $a->qual < 10
 		}
 
+		#does the chromosome have genes?
+		++$counts->{"$NO_FEATURE-$chr"} && return if !exists $iforest{$chr};
+
 		#get the cigar string
 		my $cigarray = $a->cigar_array;
 		#the cigar parser parses only a subset of the possible elements. This

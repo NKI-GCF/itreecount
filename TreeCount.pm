@@ -88,7 +88,7 @@ sub count_read_callback {
 		}
 
 		#does the chromosome have genes?
-		++$counts->{"$NO_FEATURE-$chr"} && return if !exists $iforest{$chr};
+		++$counts->{"$NO_FEATURE-$chr"} && return if !exists $iforest->{$chr};
 
 		#get the cigar string
 		my $cigarray = $a->cigar_array;

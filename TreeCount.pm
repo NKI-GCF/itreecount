@@ -98,6 +98,7 @@ sub count_read_callback {
 				#store gene name if segment overlaps a gene (optionally stranded)
 				foreach ((@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);})) {
 					$genes{$_->[0]}++ if !$stranded || ( (($flag & 16) != 0 ) == $_->[1]);
+				}
 				$pos += $e->[1];
 			} elsif ($e->[0] =~ /^N/) {
 				$pos += $e->[1];
@@ -132,6 +133,7 @@ sub read_gtf_as_intervalforest {
 	my $nread = 0;
 	my %genecount;
 	while(my $line = <IN>) {
+		next if(substr($line, 0, 1) eq "#");
 		my @e = split /\t/, $line;
 		
 		next unless $e[2] eq "exon";

@@ -102,7 +102,7 @@ sub count_read_callback {
 				foreach ((@{$iforest->{$chr}->fetch($pos, $pos + $e->[1]);})) {
 					$genes{$_->[0]}++ if !$stranded || 
 						( 
-							( ($flag & 64) && ( (($flag & 16) != 0 ) == $_->[1]) ) || # first read in pair strand equals reverse gene strand
+							( ($flag & 64 || (!($flag & 1))) && ( (($flag & 16) != 0 ) == $_->[1]) ) || # first read in pair or single read,  strand equals reverse gene strand
 							( ($flag & 128) && ( (($flag & 16) != 0 ) != $_->[1]) )   # second read in pair strand equals gene strand
 						);
 				}

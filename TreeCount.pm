@@ -47,7 +47,7 @@ sub count_read_callback {
 	next if $flag & 4;
 
 	#also skip non primary alignments, vendor-failed and marked (optical) duplicates
-	next if ($flag & 256) && ($flag & 512) && ($flag & 1024);
+	next if ($flag & 256) || ($flag & 512) || ($flag & 1024);
 
 	my @countthis;
 

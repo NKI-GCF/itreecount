@@ -44,10 +44,10 @@ sub count_read_callback {
 	
 	my $flag = $alignment->flag;
 	#we don't get unmapped reads in tophat output, but skip them anyway
-	next if $flag & 4;
+	return if $flag & 4;
 
 	#also skip non primary alignments, vendor-failed and marked (optical) duplicates
-	next if ($flag & 256) || ($flag & 512) || ($flag & 1024);
+	return if ($flag & 256) || ($flag & 512) || ($flag & 1024);
 
 	my @countthis;
 

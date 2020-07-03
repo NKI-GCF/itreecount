@@ -1,5 +1,13 @@
 # itreecount
 
+## Archived notice.
+Although functionally ok and relatively fast itreecount has some deprecated
+dependendencies. Instead of updating a replacement program wis written in Rust
+which performs much better. You can find it here:
+https://github.com/NKI-GCF/gensum
+
+----
+
 itreecount counts reads from bam files on genomic regions supplied trough a GTF
 file. The processing is parallelized over chromosomes in the bam file only. Counting 
 is done identical to the union method of the popular (but slow) htseq-count python package.
